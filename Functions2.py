@@ -26,14 +26,14 @@ def random_point_on_n_sphere(n):
     x = x / np.linalg.norm(x)
     return x
 
-def plot_figure(x,y=None,step=1):
+def plot_figure(x,y=None, step=1, info = False):
     '''Given a four dimensional array x, this function plots the figure.
     First dimension of x contains all the pictures
     Second dimensions of x are the datapoints per picture
     Third dimension is the row of the data (x and y)
     Fourth dimension is equal to the columns of the data (always 1)'''
-    
-    print('given data to plot is ', x)
+    if info:
+        print('given data to plot is ', x)
     #clear figure
     num_pictures=x.shape[0]
     num_points_per_picture=x.shape[1]
@@ -118,29 +118,6 @@ def constr_skew_basis(dim=2):
             basis_it=basis_it+1
    
     return basis
-
-# def project_on_tangent(Eucl_grad,R,U):
-#     '''Projection of Eucl_grad onto the tangent space T_R M, given a basis U for T_I M'''
-#     #print('Eucl_grad is' , Eucl_grad)
-#     # R_trans_R=np.einsum('ij,kj->ik',R,R)
-#     # R_trans_Eucl_grad=np.einsum('ji,jk->ik',R,Eucl_grad)
-#     # skew_R_trans_Eucl_grad=0.5*(R_trans_Eucl_grad-np.transpose(R_trans_Eucl_grad))
-#     # Riem_grad=np.einsum('ij,jk->ik',np.identity(2)-R_trans_R,Eucl_grad)+np.einsum('ij,jk->ik',R,skew_R_trans_Eucl_grad)
-#     dim=R.shape[0]
-#     num_basis=U.shape[0]
-#     U_R=np.einsum('ij,njk->nik',R,U) #changed
-#     U_R_matrix =np.reshape(U_R,(dim*dim, num_basis),order='F') #order column wise
-#     print('U_R', U_R)
-#     print('U_R_matrix', U_R_matrix)
-#     Eucl_grad_vec = np.reshape(Eucl_grad, dim*dim, order='F') #order column wise
-#     #print('Eucl_grad', Eucl_grad)
-#     print('Eucl_grad_vec',Eucl_grad_vec)
-#     Riem_grad_vec=np.einsum('ij,kj,k->i',U_R_matrix,U_R_matrix,Eucl_grad_vec)
-#     #print('Riem_grad_vec', Riem_grad_vec)
-#     Riem_grad=np.reshape(Riem_grad_vec,(dim,dim), order='F')
-#     #print('Riem_grad', Riem_grad)
-    
-#     return Riem_grad
 
 
 
