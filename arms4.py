@@ -4,51 +4,89 @@ import matplotlib.pyplot as plt
 from scipy.linalg import expm
 
 ############
-# Robot arm 2D, same as arms3, however now the gradient of the loss function is correct.
-# As a result the arm often gets stuck in a local minimum.
+# Robot arm 2D, with intermediate points, work in progress
 ############
 
 #
+def intermediate_points(x, n_inter, start_point = True):
+    '''Give a np.array x (of any dimension). This function adds n_inter intermediate
+    points between every point on axis 0.
+    Requires: x, np.array; n_inter, number of intermediate point
+    Output: x_inter_con, x array with intermediate points.
+    '''
+    n_x = np.shape(x)[0]
+    x_inter_con = np.linspace(x[0],x[1], n_inter+1, endpoint = False, axis=0)
+    
+    for x_it in range(1,n_x-1):
+        x_inter = np.linspace(x[x_it],x[x_it+1], n_inter+1, endpoint = False, axis=0) #start and end
+        x_inter_con = np.append(x_inter_con, x_inter)
+        
+    x_inter_con = np.concatenate((x_inter_con, x[np.newaxis, -1]))
+    
+    if start_point == False:
+        x_inter_con = x_inter_con[1:]
+    
+    
+    return x_inter_con
 
 def parabool_path(t):
     '''Gives one point on the path at time t.'''
+    
     path = np.array([[t], [-(t-1)**2+1]]) 
     
     return path
 
 def parabool_path_multi(times):
     '''Calculate the coordinates of the parabool at multiple times.'''
-    n_t = np.shape(times)[0]
-    path = np.zeros((n_t,2,1))
-    for t_it in range(n_t):
-        path[t_it,:,:] = np.array([[times[t_it]], [-(times[t_it]-1)**2+1]]) 
-        
+    
+    path = np.array([[[t], [-(t-1)**2+1]] for t in times]) 
+    
     return path
 
-def d_parabool_path_multi(y, t):
-    '''Calculate the gradient w.r.t. to t for multple times using the arm
-    positions y (not including the origin).'''
-    n_arms = np.shape(t)[0]
-    d_path = np.zeros((n_arms, 2, 1))
-    
-    for it_arm in range(n_arms):
-        d_path[it_arm,:,:] = np.array([[1], [-2*(t[it_arm]-1)]])  
-    #print('arm posisitons: ', y)
-    #print('parabool path positions: ', parabool_path_multi(t))
-    dt = -2*np.einsum('nji, njk -> nik', (y - parabool_path_multi(t)), d_path)
-    #print('dt: ', dt)
-    return np.squeeze(dt) #removes redundant dimensions
 
-def update_t(y, t, eta_t):
+def d_parabool_path_multi(y, times, n_inter = 0):
+    '''Calculate the gradient w.r.t. to t for multple times using the arm
+    positions y (including the origin).'''
+    n_arm = np.shape(times)[0]
+    dt = np.zeros(n_arm)
+    # print('times is: ', times)
+    for arm_it in range(0, n_arm):
+        if arm_it ==0:
+            # print('tets is: ', np.array([0,times[arm_it]]))
+            t_inter = intermediate_points(np.array([0,times[arm_it]]), n_inter, start_point = False)
+        else:
+            t_inter = intermediate_points(np.array([times[arm_it-1], times[arm_it]]), n_inter, start_point = False)
+            
+        y_inter = intermediate_points(np.array([y[arm_it], y[arm_it+1]]), n_inter, start_point = False)
+        #print('y_inter is: ', y_inter)
+        # print('t_inter is: ', t_inter)
+        
+        d_gamma = np.array([[[1], [-2*(t-1)]] for t in t_inter])
+        front_factor = np.array([ i / (n_inter+1) for i in range(1,n_inter+2)])
+        d_path_arm = np.array([front_factor[i] * d_gamma[i] for i in range(0, n_inter+1)])
+        
+        # print('d_path_arm is: ', d_path_arm)
+        # print('y_inter is: ', y_inter)
+        # print('para is: ', parabool_path_multi(t_inter))
+        # print('y-para is: ', y_inter-parabool_path_multi(t_inter))
+        
+        dt_inter = -2 * np.einsum('nji, njk -> nik', y_inter-parabool_path_multi(t_inter), d_path_arm)
+        # print('dt_inter is: ', dt_inter)
+        dt[arm_it] = (1/(n_arm*(n_inter+1))) * np.sum(dt_inter)
+        
+        print('dt is: ', dt)
+    return dt
+
+def update_t(y, t, eta_t, n_inter = 0):
     '''Update the t variable using learning rate eta_t and
-    the arm positions y (not including the origin).'''
-    dt = d_parabool_path_multi(y, t)
+    the arm positions y (including the origin).'''
+    dt = d_parabool_path_multi(y, t, n_inter = n_inter)
     
     t = t - eta_t*dt
     
     return t
 
-def update_arms(R, x_0, t, eta, eta_t, U_U_trans, info=False):
+def update_arms(R, x_0, t, eta, eta_t, U_U_trans, info=False, n_inter=0):
     '''Update R for one arm'''
     n_arm = np.shape(R)[0]
     n = np.shape(R)[1]
@@ -57,29 +95,36 @@ def update_arms(R, x_0, t, eta, eta_t, U_U_trans, info=False):
     R_update = R.copy()
     t_update = t.copy()
     
+    #calculating Euclidean gradient
     
-    for arm_it in range(0, n_arm):
-        
-        #if arm_it == (n_arm-1): 
-            #print("test1: ", y_current[arm_it] - parabool_path(t[arm_it]))
-            #print("test2: ", parabool_path(t[arm_it]))
-            #print("test3: ", x_0)
+    for arm_it in range((n_arm-1),-1, -1):
+        if arm_it == 0:
+            t_inter = intermediate_points(np.array([0,t[arm_it]]), n_inter, start_point=False)
+        else:
+            t_inter = intermediate_points(np.array([t[arm_it-1], t[arm_it]]), n_inter, start_point=False)
             
-        ######
-        #this is code based on arm3
-        ########
-        # y_star = parabool_path(t[arm_it]) - y_current[arm_it]
-        # print('y_star is:', y_star, ' for arm piece ', arm_it)
-        # R_update[arm_it,:, :] = func2.update_R(R_update[arm_it], x_0[np.newaxis,:,:], y_star, U_U_trans, eta[arm_it])
+        #print('t_inter is: ', t_inter)
         
-        # y_current = retrieve_axis_positions(R, x_0)
-        #######
-        #end
-        ######
+        y_inter = intermediate_points(np.array([y_current[arm_it], y_current[arm_it+1]]), n_inter, start_point=False)
+        fact = np.array([2*i/(n_inter+1) for i in range(1,n_inter+2)])
+        dist = y_inter - parabool_path_multi(t_inter)
+        fact_x_dist = np.array([fact[i]*dist[i] for i in range(0, n_inter+1)])
         
-        #could be speed up
-        for arm_it_it in range((n_arm-1), (arm_it-1), -1):
-            Eucl_grad[arm_it] = Eucl_grad[arm_it] + 2*np.einsum('ij, kj -> ik', y_current[arm_it_it] - parabool_path(t[arm_it_it]), x_0)
+        print('fact is: ', fact)
+        print('dist is: ', dist)
+        print('fact_x_dist is: ', fact_x_dist)
+        
+        dist_sum = np.sum(fact_x_dist, axis=0)
+        print('dist_sum is: ', dist_sum)
+        
+        if arm_it == (n_arm-1):
+            Eucl_grad[arm_it] = (1/(n_arm*(n_inter+1))) * np.einsum('ij, kj -> ik', dist_sum, x_0)
+        else:
+            Eucl_grad[arm_it] = Eucl_grad[arm_it+1] + (1/(n_arm*(n_inter+1))) * np.einsum('ij, kj -> ik', dist_sum, x_0)
+    
+    
+    #Calculating Riem_grad and updating the R's
+    for arm_it in range(0, n_arm):
         
         in_exp=func2.calc_Riem_grad(Eucl_grad[arm_it],R[arm_it],U_U_trans)
         
@@ -96,12 +141,12 @@ def update_arms(R, x_0, t, eta, eta_t, U_U_trans, info=False):
             print("The determinant is: ", np.linalg.det(R_update[arm_it]))
             print("Should be idenity: ", np.einsum("ij,kj -> ik", R_update[arm_it], R_update[arm_it]))
         
-    y_current = retrieve_axis_positions(R_update, x_0, origin = False)
+    y_current = retrieve_axis_positions(R_update, x_0)
             
-    t_update = update_t(y_current[1:,:,:], t_update, eta_t)
+    t_update = update_t(y_current, t_update, eta_t, n_inter = n_inter)
     
     if info:
-        print('t is: ',t_update)
+        print('t is: ', t_update)
     
     return R_update, t_update
 
@@ -122,7 +167,7 @@ def retrieve_axis_positions(R, x_0, origin = True):
         
     return y
 
-def Riemannian_grad_descent_multi_arms(R_0, x_0, t_0, eta, eta_t, max_it, info = False):
+def Riemannian_grad_descent_multi_arms(R_0, x_0, t_0, eta, eta_t, max_it, info = False, n_inter = 0):
     '''Riemannian gradient descent for multiple robotic arms of the same length ||x_0|| (concatenated).
     Requires: R_0, initial guesses for all rotation points (dimension is n_arms x n x n);
     x_0, resting position of one arm piece; t_0, initial time guesses (dim is n_arms);
@@ -148,21 +193,14 @@ def Riemannian_grad_descent_multi_arms(R_0, x_0, t_0, eta, eta_t, max_it, info =
     R_new=R.copy()
     t_it = np.zeros((max_it+1, n_arms))
     t_it[0,:] = t_0 #adding intial times
-    
-    #x_0_extra_dim = x_0[np.newaxis,:,:] #we need a 3d array for update arm.
-    
+        
     for it in range(0,max_it):
         
         y_new = y_it[it, :, :, :].copy()
         print('IT NUMBER IS: ', it+1)
         
-        #print('t_it is: ', t_it[it])
-        
-        R_new, t_it[it+1,:] = update_arms(R, x_0, t_it[it], eta, eta_t, U_U_trans, info=info)
+        R_new, t_it[it+1,:] = update_arms(R, x_0, t_it[it], eta, eta_t, U_U_trans, info=info, n_inter = n_inter)
          
-        
-        #t_it[it+1,:] = update_t(y_new[1:n_arms+1,:,:],t_it[it,:],eta_t) #not including the origin
-            
         R = R_new.copy()
         y_new = retrieve_axis_positions(R, x_0) #should be deleted
         
@@ -170,7 +208,7 @@ def Riemannian_grad_descent_multi_arms(R_0, x_0, t_0, eta, eta_t, max_it, info =
 
     return R, y_it, t_it
 
-def calc_loss(y_it, t_it):
+def calc_loss(y_it, t_it, n_inter = 0):
     '''Calculates the loss function.
     Requires: y_it, robot arm positions of multiple iterations; 
     t_it, time update of multiple iterations.
@@ -180,12 +218,17 @@ def calc_loss(y_it, t_it):
     n_it_p_init = np.shape(t_it)[0]
     n_arms = np.shape(t_it)[1]
     loss = np.zeros((n_it_p_init,n_arms+1))
-    
-    for it in range(0,n_it_p_init):
-        loss_all_arms = np.squeeze(np.linalg.norm(y_it[it,1:n_arms+1,:,:] - parabool_path_multi(t_it[it]), axis=1))
-        #print('loss_all_norms is: ', loss_all_arms)
-        loss[it,0]=loss_all_arms.mean()
-        loss[it,1:(n_arms+1)] = loss_all_arms
+    for it in range (0, n_it_p_init):
+        for arm_it in range(0,n_arms):
+            y_inter = intermediate_points(np.array([y_it[it, arm_it], y_it[it, arm_it+1]]), n_inter, start_point=False)
+            
+            if arm_it == 0: 
+                t_inter = intermediate_points(np.array([0, t_it[it, arm_it]]), n_inter, start_point=False)
+            else:
+                t_inter = intermediate_points(np.array([t_it[it,arm_it-1], t_it[it, arm_it]]), n_inter, start_point=False)
+            
+            loss[it, arm_it+1] = np.linalg.norm(y_inter - parabool_path_multi(t_inter), axis=1).mean()
+        loss[it, 0] = loss[it,1:].mean()
         
     return loss
     
@@ -206,20 +249,21 @@ y=retrieve_axis_positions(R_0, x_0)
 print('initial coordinate are ', y)
 print('initial t is: ', t_0)
 
-#eta=np.array([0.5, 0.5, 1, 1, 1])
-eta = 0.5
-eta_t=0.001
-max_it = 10
+#eta=np.array([0.5, 0.5, 0.5, 0.5, 0.5])
+eta=2
+eta_t=0.5
+max_it = 50
+n_inter = 9
 n_to_plot=5
 
-#path = parabool_path_multi(t_0)
-#dt = d_parabool_path_multi(y[1:n_arms+1], t_0)
-#('test done')
+
+print('test done')
 
 #performing the algorithm
-R, y_it, t_it = Riemannian_grad_descent_multi_arms(R_0, x_0, t_0, eta, eta_t, max_it, info= False)
+R, y_it, t_it = Riemannian_grad_descent_multi_arms(R_0, x_0, t_0, eta, eta_t, max_it, info=False, n_inter = n_inter)
 
 #calculating losses
+
 loss = calc_loss(y_it, t_it)
 
 #plotting results  
