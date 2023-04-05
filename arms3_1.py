@@ -33,10 +33,13 @@ def d_parabool_path_multi(y, t):
     
     for it_arm in range(n_arms):
         d_path[it_arm,:,:] = np.array([[1], [-2*(t[it_arm]-1)]])  
-    #print('arm posisitons: ', y)
-    #print('parabool path positions: ', parabool_path_multi(t))
-    dt = -2*np.einsum('nji, njk -> nik', (y - parabool_path_multi(t)), d_path)
-    #print('dt: ', dt)
+    # print('arm posisitons: ', y)
+    # print('parabool path positions: ', parabool_path_multi(t))
+    # print('old t is: ', t)
+    # print('d_path is: ', d_path)
+    # print('y - para is: ', (y - parabool_path_multi(t)))
+    dt = (-2/n_arms)*np.einsum('nji, njk -> nik', (y - parabool_path_multi(t)), d_path)
+    # print('dt in d_parabool_path_multi is: ', dt)
     return np.squeeze(dt) #removes redundant dimensions
 
 def update_t(y, t, eta_t):
@@ -44,7 +47,11 @@ def update_t(y, t, eta_t):
     the arm positions y (not including the origin).'''
     dt = d_parabool_path_multi(y, t)
     
+    print('dt is: ', dt)
+    
     t = t - eta_t*dt
+    
+    print('t_new is: ', t)
     
     return t
 
@@ -53,7 +60,7 @@ def update_arms(R, x_0, t, eta, eta_t, U_U_trans, info=False):
     n_arm = np.shape(R)[0]
     n = np.shape(R)[1]
     Eucl_grad= np.zeros((n_arm, n, n))
-    y_current = retrieve_axis_positions(R, x_0, origin = True)
+    y_current = retrieve_axis_positions(R, x_0, origin = False)
     R_update = R.copy()
     t_update = t.copy()
     
@@ -79,9 +86,10 @@ def update_arms(R, x_0, t, eta, eta_t, U_U_trans, info=False):
         
         #could be speed up
         for arm_it_it in range((n_arm-1), (arm_it-1), -1):
-            Eucl_grad[arm_it] = Eucl_grad[arm_it] + 2*np.einsum('ij, kj -> ik', y_current[arm_it_it] - parabool_path(t[arm_it_it]), x_0)
+            Eucl_grad[arm_it] = Eucl_grad[arm_it] + 2*(1/n_arm)*np.einsum('ij, kj -> ik', y_current[arm_it_it] - parabool_path(t[arm_it_it]), x_0)
         
         in_exp=func2.calc_Riem_grad(Eucl_grad[arm_it],R[arm_it],U_U_trans)
+        print('Riem_grad is: ', in_exp)
         
         if np.size(eta) > 1:
             R_exp = expm(-eta[arm_it]*in_exp)
@@ -96,9 +104,10 @@ def update_arms(R, x_0, t, eta, eta_t, U_U_trans, info=False):
             print("The determinant is: ", np.linalg.det(R_update[arm_it]))
             print("Should be idenity: ", np.einsum("ij,kj -> ik", R_update[arm_it], R_update[arm_it]))
         
-    y_current = retrieve_axis_positions(R_update, x_0, origin = False)
-            
-    t_update = update_t(y_current[1:,:,:], t_update, eta_t)
+    t_update = update_t(y_current, t_update, eta_t)
+    
+    #y_current = retrieve_axis_positions(R_update, x_0, origin = False)
+
     
     if info:
         print('t is: ',t_update)
@@ -116,9 +125,12 @@ def identity_Rs(n, n_arms):
 def retrieve_axis_positions(R, x_0, origin = True):
     '''Calculates the positions of the rotation axes. Also gives the origin as starting point.'''
     n_arm, n = np.shape(R)[0:2]
-    y = np.zeros((n_arm+origin, n, 1))
+    y = np.zeros((n_arm + 1, n, 1))
     for it_arm in range(0, n_arms):
-        y[it_arm+origin,:,:] = y[it_arm,:,:] + np.einsum('ij, jk -> ik', R[it_arm,:,:], x_0)
+        y[it_arm+1,:,:] = y[it_arm,:,:] + np.einsum('ij, jk -> ik', R[it_arm,:,:], x_0)
+    
+    if origin == False:
+        y = y[1:]
         
     return y
 
@@ -207,9 +219,9 @@ print('initial coordinate are ', y)
 print('initial t is: ', t_0)
 
 #eta=np.array([0.5, 0.5, 1, 1, 1])
-eta = 0.5
-eta_t=0.001
-max_it = 10
+eta = 1
+eta_t=0.1
+max_it = 100
 n_to_plot=5
 
 #path = parabool_path_multi(t_0)
