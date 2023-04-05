@@ -3,7 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 ############
-# Robot arm 2D, new, multiple arms each one end point
+# Robot arm 2D, new, multiple arms each one end point, iterating over every rotation axis
+# So we don't update R_1, R_2, ... simultaniously, but first R_1 -> new y -> R_2 -> new y -> ... -> new y -> new t
+# and repeat.
 ############
 
 #
@@ -33,7 +35,7 @@ def d_parabool_path_multi(y, t):
         d_path[it_arm,:,:] = np.array([[1], [-2*(t[it_arm]-1)]])  
     #print('arm posisitons: ', y)
     #print('parabool path positions: ', parabool_path_multi(t))
-    dt = -2*np.einsum('nji, njk -> nik', (y - parabool_path_multi(t)), d_path)
+    dt = (-2/n_arms)*np.einsum('nji, njk -> nik', (y - parabool_path_multi(t)), d_path)
     #print('dt: ', dt)
     return np.squeeze(dt) #removes redundant dimensions
 
@@ -47,7 +49,7 @@ def update_t(y, t, eta_t):
     
     return t
 
-def update_arm(R, x, y_star, eta, eta_t, U_U_trans):
+def update_arm(R, x, y_star, U_U_trans, eta, eta_t):
     '''Update R and t for one arm'''
     R_new = func2.update_R(R, x, y_star, U_U_trans, eta)
     # print('update from update arm: ', R_new)
@@ -97,7 +99,11 @@ def Riemannian_grad_descent_multi_arms(R_0, x_0, t_0, eta, eta_t, max_it):
     Requires: R_0, initial guesses for all rotation points (dimension is n_arms x n x n);
     x_0, resting position of one arm piece; t_0, initial time guesses (dim is n_arms);
     eta, learning rate for the rotation matrices; eta_t, learning rate for the time steps;
-    max_it, maximum number of iterations.'''
+    max_it, maximum number of iterations.
+    Output: R, rotation of every arm piece w.r.t. the x-axis;
+    y_it, an (n_it+1) x (n_arms+1) array containing the coordinates of the rotation axes
+    (including the origin) for every iteration (including the initial position);
+    t_it, t values for the path for every iteration (including the initial t values).'''
     n = np.shape(R_0)[1]
     n_arms = np.shape(R_0)[0]
     
@@ -113,7 +119,7 @@ def Riemannian_grad_descent_multi_arms(R_0, x_0, t_0, eta, eta_t, max_it):
     R=R_0.copy()
     R_new=R.copy()
     t_it = np.zeros((max_it+1, n_arms))
-    t_it[0,:] = t_0
+    t_it[0,:] = t_0 #adding intial times
     
     x_0_extra_dim = x_0[np.newaxis,:,:] #we need a 3d array for update arm.
     
@@ -128,9 +134,9 @@ def Riemannian_grad_descent_multi_arms(R_0, x_0, t_0, eta, eta_t, max_it):
             y_star = parabool_path(t_it[it, it_arm])-y_new[it_arm, :, :] #gamma - previous rotation point
             #print('arm piece is ', it_arm, ', y_star is: ', y_star)
             #print('y_star size: ', np.shape(y_star))
-            R_new[it_arm, :, :] = update_arm(R[it_arm,:,:], x_0_extra_dim, y_star, eta, eta_t, U_U_trans)
+            R_new[it_arm, :, :] = update_arm(R[it_arm,:,:], x_0_extra_dim, y_star, U_U_trans, eta/n_arms, eta_t)
             
-            #compensating for rotations
+            #compensating for rotations (does not have much impact)
             # for it_next_arms in range(it_arm+1, n_arms):
             #     R_new[it_next_arms,:,:] = np.einsum('ij, jk -> ik', R_new[it_arm, :, :], R_new[it_next_arms,:,:] ) 
             
@@ -178,9 +184,10 @@ y=retrieve_axis_possitions(R_0, x_0)
 print('initial coordinate are ', y)
 print('initial t is: ', t_0)
 
-eta=0.3
-eta_t=0.1
-max_it = 50
+eta=1
+eta_t=0.08
+max_it = 100
+n_to_plot=10
 
 #path = parabool_path_multi(t_0)
 #dt = d_parabool_path_multi(y[1:n_arms+1], t_0)
@@ -196,7 +203,7 @@ loss = calc_loss(y_it, t_it)
 # plotting arm
 plt.close('all')
 plt.figure()
-func2.plot_figure(y_it, step=5)
+func2.plot_figure(y_it, step=max_it/n_to_plot)
 
 num_points_gamma = 100
 t_to_plot = np.linspace(0,2,num_points_gamma)
@@ -209,6 +216,7 @@ plt.plot(x1, x2, label='desired')
 plt.xlim([0,2])
 plt.ylim([0,2])
 plt.legend()
+plt.title('robotic arm')
 
 #plotting loss functions
 plt.figure()
@@ -222,6 +230,7 @@ for arm in range(1, (n_arms+1)):
     labels[arm] = 'arm %s' % arm
 
 plt.legend(labels)
+plt.title('loss of robotic arm')
 
 
 
