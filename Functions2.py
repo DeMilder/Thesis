@@ -35,29 +35,47 @@ def plot_figure(x,y=None, step=1, info = False):
     if info:
         print('given data to plot is ', x)
     #clear figure
-    num_pictures=x.shape[0]
+    num_pictures, num_points_per_picture, n_dim =x.shape[0:3]
     num_points_per_picture=x.shape[1]
-    plot_data=np.zeros((2, num_points_per_picture))
+    plot_data=np.zeros((n_dim, num_points_per_picture))
     label_format='it {it_step:.0f}'
     for picture in range(num_pictures):
         if picture%step == 0:
-            plot_data[:,:] = np.array([x[picture,:,0,0],x[picture,:,1,0]])
+            plot_data = np.array([x[picture,:,dim,0] for dim in range(0,n_dim)])
             # print('plot_data is: ', plot_data)
-            plt.plot(plot_data[0,:],plot_data[1,:],label=label_format.format(it_step=picture))
-        
+            if n_dim==2:
+                plt.plot(plot_data[0,:],plot_data[1,:],label=label_format.format(it_step=picture))
+                ax = plt.gca()
+                ax.set_aspect('equal', adjustable='box')
+                plt.xlabel('x')
+                plt.ylabel('y')
+            elif n_dim==3:
+                ax = plt.gca(projection='3d')
+                ax.plot3D(plot_data[0,:], plot_data[1,:], plot_data[2,:], label=label_format.format(it_step=picture))
+                ax.set_xlabel('x')
+                ax.set_ylabel('y')
+                ax.set_zlabel('z')
+            else:
+                print("Given data is not 2 or 3 dimensional, so no visualization is given.")
+                return
+            
     #print('plot_data is', plot_data)
     
     #plotting y
-    if y is not None:
-        plot_data[:,:]=np.array([y[:,0,0],y[:,1,0]])
-        plt.plot(plot_data[0,:],plot_data[1,:],label='desired')
+    if (y is not None) and (n_dim < 4):
+        plot_data = np.array([y[:,dim,0] for dim in range(0,n_dim)])
+        if n_dim==2:
+            plt.plot(plot_data[0,:], plot_data[1,:], label='desired')
+        elif n_dim==3:
+            ax.plot3D(plot_data[0,:], plot_data[1,:], plot_data[2,:], label='desired')
+        else:
+            print("The desired data is not of dimension 2 or 3")
+            
     
-    plt.xlim([-1,1])
-    plt.ylim([-1,1])
+    #plt.xlim([-1,1])
+    #plt.ylim([-1,1])
     plt.show()
     plt.legend()
-    ax = plt.gca()
-    ax.set_aspect('equal', adjustable='box')
     
     
 def plot_loss(losses, log=True):
